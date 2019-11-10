@@ -17,10 +17,10 @@ import static org.mockito.Matchers.*;
 import static org.mockito.Mockito.*;
 import static org.junit.Assert.*;
 
-public class MockitoTest {
+public class MockitoTest {	
 	
-	@Test
-	//验证行为
+	//验证行为------------------------------------------------------------------
+	@Test	
     public void verify_behaviour(){
         //模拟创建一个List对象
         List mock = mock(List.class);
@@ -32,8 +32,8 @@ public class MockitoTest {
         verify(mock).clear();
     }
 	
-    @Test
-    //模拟我们所期望的结果
+	//模拟我们所期望的结果-------------------------------------------------------
+    @Test    
     public void when_thenReturn(){
         //mock一个Iterator类
         Iterator iterator = mock(Iterator.class);
@@ -45,8 +45,7 @@ public class MockitoTest {
         assertEquals("hello world world",result);
     }
     
-    @Test(expected = IOException.class)
-    //模拟我们所期望的结果
+    @Test(expected = IOException.class)  
     public void when_thenThrow() throws IOException {
         OutputStream outputStream = mock(OutputStream.class);
         OutputStreamWriter writer = new OutputStreamWriter(outputStream);
@@ -54,6 +53,22 @@ public class MockitoTest {
         doThrow(new IOException()).when(outputStream).close();
         outputStream.close();
     }
+    
+    //参数匹配------------------------------------------------------------------
+    @Test
+    public void with_arguments(){
+        Comparable comparable = mock(Comparable.class);
+        //预设根据不同的参数返回不同的结果
+        when(comparable.compareTo("Test")).thenReturn(1);
+        when(comparable.compareTo("Omg")).thenReturn(2);
+        assertEquals(1, comparable.compareTo("Test"));
+        assertEquals(2, comparable.compareTo("Omg"));
+        //对于没有预设的情况会返回默认值
+        assertEquals(0, comparable.compareTo("Not stub"));
+    }
+    
+    
+    
     
     @Test
     /*
@@ -78,18 +93,7 @@ public class MockitoTest {
         list.add(1);
     }
     
-    //参数匹配
-    @Test
-    public void with_arguments(){
-        Comparable comparable = mock(Comparable.class);
-        //预设根据不同的参数返回不同的结果
-        when(comparable.compareTo("Test")).thenReturn(1);
-        when(comparable.compareTo("Omg")).thenReturn(2);
-        assertEquals(1, comparable.compareTo("Test"));
-        assertEquals(2, comparable.compareTo("Omg"));
-        //对于没有预设的情况会返回默认值
-        assertEquals(0, comparable.compareTo("Not stub"));
-    }
+    
     
     //除了匹配制定参数外，还可以匹配自己想要的任意参数
     @Test
