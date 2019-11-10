@@ -3,148 +3,329 @@ package mockito;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Iterator;
+import java.util.LinkedList;
 import java.util.List;
 
 import org.junit.Test;
 import org.mockito.ArgumentMatcher;
+import org.mockito.InOrder;
+import org.mockito.exceptions.verification.NoInteractionsWanted;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
 
 import static org.mockito.Matchers.*;
-// import static ÔÊĞíÓÃ»§Ö±½ÓÊ¹ÓÃÀàµÄ¾²Ì¬·½·¨£¬¶øÎŞĞèÉùÃ÷Àà
-// mock(List.class) ¾ÍÊÇÖ±½ÓÊ¹ÓÃ Mockito* ÀïµÄ public static <T> T mock(Class<T> classToMock)
+// import static å…è®¸ç”¨æˆ·ç›´æ¥ä½¿ç”¨ç±»çš„é™æ€æ–¹æ³•ï¼Œè€Œæ— éœ€å£°æ˜ç±»
+// mock(List.class) å°±æ˜¯ç›´æ¥ä½¿ç”¨ Mockito* é‡Œçš„ public static <T> T mock(Class<T> classToMock)
 import static org.mockito.Mockito.*;
 import static org.junit.Assert.*;
 
-public class MockitoTest {	
+public class MockitoTest {
+
+	// éªŒè¯è¡Œä¸º------------------------------------------------------------------
+	@Test
+	public void verify_behaviour() {
+		// æ¨¡æ‹Ÿåˆ›å»ºä¸€ä¸ªListå¯¹è±¡
+		List mock = mock(List.class);
+		// ä½¿ç”¨mockçš„å¯¹è±¡
+		mock.add(1);
+		mock.clear();
+		// éªŒè¯add(1)å’Œclear()è¡Œä¸ºæ˜¯å¦å‘ç”Ÿ
+		verify(mock).add(1);
+		verify(mock).clear();
+	}
+
+	// æ¨¡æ‹Ÿæˆ‘ä»¬æ‰€æœŸæœ›çš„ç»“æœ-------------------------------------------------------
+	@Test
+	public void when_thenReturn() {
+		// mockä¸€ä¸ªIteratorç±»
+		Iterator iterator = mock(Iterator.class);
+		// é¢„è®¾å½“iteratorè°ƒç”¨next()æ—¶ç¬¬ä¸€æ¬¡è¿”å›helloï¼Œç¬¬næ¬¡éƒ½è¿”å›world
+		when(iterator.next()).thenReturn("hello").thenReturn("world");
+		// ä½¿ç”¨mockçš„å¯¹è±¡
+		String result = iterator.next() + " " + iterator.next() + " " + iterator.next();
+		// éªŒè¯ç»“æœ
+		assertEquals("hello world world", result);
+	}
+
+	// æ¨¡æ‹ŸæŠ“å–å¼‚å¸¸---------------------------------------------------------------
+	@Test(expected = IOException.class)
+	public void when_thenThrow() throws IOException {
+		OutputStream outputStream = mock(OutputStream.class);
+		OutputStreamWriter writer = new OutputStreamWriter(outputStream);
+		// é¢„è®¾å½“æµå…³é—­æ—¶æŠ›å‡ºå¼‚å¸¸
+		doThrow(new IOException()).when(outputStream).close();
+		outputStream.close();
+	}
+
+	@Test(expected = RuntimeException.class)
+	public void doThrow_when() {
+		List list = mock(List.class);
+		doThrow(new RuntimeException()).when(list).add(1);
+		list.add(1);
+	}
+
+	// å‚æ•°åŒ¹é…------------------------------------------------------------------
+	@Test
+	public void with_arguments() {
+		Comparable comparable = mock(Comparable.class);
+		// é¢„è®¾æ ¹æ®ä¸åŒçš„å‚æ•°è¿”å›ä¸åŒçš„ç»“æœ
+		when(comparable.compareTo("Test")).thenReturn(1);
+		when(comparable.compareTo("Omg")).thenReturn(2);
+		assertEquals(1, comparable.compareTo("Test"));
+		assertEquals(2, comparable.compareTo("Omg"));
+		// å¯¹äºæ²¡æœ‰é¢„è®¾çš„æƒ…å†µä¼šè¿”å›é»˜è®¤å€¼
+		assertEquals(0, comparable.compareTo("Not stub"));
+	}
+
+	// é™¤äº†åŒ¹é…åˆ¶å®šå‚æ•°å¤–ï¼Œè¿˜å¯ä»¥åŒ¹é…è‡ªå·±æƒ³è¦çš„ä»»æ„å‚æ•°-----------------------------
+	@Test
+	public void with_unspecified_arguments() {
+		List list = mock(List.class);
+		// åŒ¹é…ä»»æ„å‚æ•°
+		when(list.get(anyInt())).thenReturn(1);
+		when(list.contains(argThat(new IsValid()))).thenReturn(true);
+		assertEquals(1, list.get(1));
+		assertEquals(1, list.get(999));
+		assertTrue(list.contains(1));
+		assertTrue(!list.contains(3));
+	}
+
+	private class IsValid extends ArgumentMatcher<List> {
+		@Override
+		public boolean matches(Object o) {
+			return (Integer) o == 1 || (Integer) o == 2;
+		}
+	}
+
+	// å¦‚æœä½ ä½¿ç”¨äº†å‚æ•°åŒ¹é…ï¼Œé‚£ä¹ˆæ‰€æœ‰çš„å‚æ•°éƒ½å¿…é¡»é€šè¿‡matchersæ¥åŒ¹é…---------------
+	@Test
+	public void all_arguments_provided_by_matchers() {
+		Comparator comparator = mock(Comparator.class);
+		comparator.compare("nihao", "hello");
+		// å¦‚æœä½ ä½¿ç”¨äº†å‚æ•°åŒ¹é…ï¼Œé‚£ä¹ˆæ‰€æœ‰çš„å‚æ•°éƒ½å¿…é¡»é€šè¿‡matchersæ¥åŒ¹é…
+		verify(comparator).compare(anyString(), eq("hello"));
+		// ä¸‹é¢çš„ä¸ºæ— æ•ˆçš„å‚æ•°åŒ¹é…ä½¿ç”¨
+		// verify(comparator).compare(anyString(),"hello");
+	}	
 	
-	//ÑéÖ¤ĞĞÎª------------------------------------------------------------------
-	@Test	
-    public void verify_behaviour(){
-        //Ä£Äâ´´½¨Ò»¸öList¶ÔÏó
-        List mock = mock(List.class);
-        //Ê¹ÓÃmockµÄ¶ÔÏó
-        mock.add(1);
-        mock.clear();
-        //ÑéÖ¤add(1)ºÍclear()ĞĞÎªÊÇ·ñ·¢Éú
-        verify(mock).add(1);
-        verify(mock).clear();
-    }
+	//åƒæ•¸åŒ¹é…çš„å¦ä¸€å€‹ä¾‹å­
+	@Test
+	public void argumentMatchersTest() {
+		// åˆ›å»ºmockå¯¹è±¡
+		List<String> mock = mock(List.class);
+
+		// argThat(Matches<T> matcher)æ–¹æ³•ç”¨æ¥åº”ç”¨è‡ªå®šä¹‰çš„è§„åˆ™ï¼Œå¯ä»¥ä¼ å…¥ä»»ä½•å®ç°Matcheræ¥å£çš„å®ç°ç±»ã€‚
+		when(mock.addAll(argThat(new IsListofTwoElements()))).thenReturn(true);
+
+		mock.addAll(Arrays.asList("one", "two", "three"));
+		// IsListofTwoElementsç”¨æ¥åŒ¹é…sizeä¸º2çš„Listï¼Œå› ä¸ºä¾‹å­ä¼ å…¥Listä¸ºä¸‰ä¸ªå…ƒç´ ï¼Œæ‰€ä»¥æ­¤æ—¶å°†å¤±è´¥ã€‚
+		verify(mock).addAll(argThat(new IsListofTwoElements()));
+	}
+
+	class IsListofTwoElements extends ArgumentMatcher<List> {
+		public boolean matches(Object list) {
+			return ((List) list).size() == 3;
+		}
+	}
+
+	// éªŒè¯ç¡®åˆ‡çš„è°ƒç”¨æ¬¡æ•°--------------------------------------------------------
+	@Test
+	public void verifying_number_of_invocations() {
+		List list = mock(List.class);
+		list.add(1);
+		list.add(2);
+		list.add(2);
+		list.add(3);
+		list.add(3);
+		list.add(3);
+		// éªŒè¯æ˜¯å¦è¢«è°ƒç”¨ä¸€æ¬¡ï¼Œç­‰æ•ˆäºä¸‹é¢çš„times(1)
+		verify(list).add(1);
+		verify(list, times(1)).add(1);
+		// éªŒè¯æ˜¯å¦è¢«è°ƒç”¨2æ¬¡
+		verify(list, times(2)).add(2);
+		// éªŒè¯æ˜¯å¦è¢«è°ƒç”¨3æ¬¡
+		verify(list, times(3)).add(3);
+		// éªŒè¯æ˜¯å¦ä»æœªè¢«è°ƒç”¨è¿‡
+		verify(list, never()).add(4);
+		// éªŒè¯è‡³å°‘è°ƒç”¨ä¸€æ¬¡
+		verify(list, atLeastOnce()).add(1);
+		// éªŒè¯è‡³å°‘è°ƒç”¨2æ¬¡
+		verify(list, atLeast(2)).add(2);
+		// éªŒè¯è‡³å¤šè°ƒç”¨3æ¬¡
+		verify(list, atMost(3)).add(3);
+	}
+
+	// éªŒè¯æ‰§è¡Œé¡ºåº------------------------------------------------------------
+	@Test
+	public void verification_in_order() {
+		List list = mock(List.class);
+		List list2 = mock(List.class);
+		list.add(1);
+		list2.add("hello");
+		list.add(2);
+		list2.add("world");
+		// å°†éœ€è¦æ’åºçš„mockå¯¹è±¡æ”¾å…¥InOrder
+		InOrder inOrder = inOrder(list, list2);
+		// ä¸‹é¢çš„ä»£ç ä¸èƒ½é¢ å€’é¡ºåºï¼ŒéªŒè¯æ‰§è¡Œé¡ºåº
+		inOrder.verify(list).add(1);
+		inOrder.verify(list2).add("hello");
+		inOrder.verify(list).add(2);
+		inOrder.verify(list2).add("world");
+	}
+
+	// ç¡®ä¿æ¨¡æ‹Ÿå¯¹è±¡ä¸Šæ— äº’åŠ¨å‘ç”Ÿ------------------------------------------------------
+	@Test
+	public void verify_interaction() {
+		List list = mock(List.class);
+		List list2 = mock(List.class);
+		List list3 = mock(List.class);
+		list.add(1);
+		verify(list).add(1);
+		verify(list, never()).add(2);
+		// éªŒè¯é›¶äº’åŠ¨è¡Œä¸º
+		verifyZeroInteractions(list2, list3);
+	}
+
+	// æ‰¾å‡ºå†—ä½™çš„äº’åŠ¨(å³æœªè¢«éªŒè¯åˆ°çš„)--------------------------------------------------------
+	@Test(expected = NoInteractionsWanted.class)
+	public void find_redundant_interaction() {
+		List list = mock(List.class);
+		list.add(1);
+		list.add(2);
+		verify(list, times(2)).add(anyInt());
+		// æ£€æŸ¥æ˜¯å¦æœ‰æœªè¢«éªŒè¯çš„äº’åŠ¨è¡Œä¸ºï¼Œå› ä¸ºadd(1)å’Œadd(2)éƒ½ä¼šè¢«ä¸Šé¢çš„anyInt()éªŒè¯åˆ°ï¼Œæ‰€ä»¥ä¸‹é¢çš„ä»£ç ä¼šé€šè¿‡
+		verifyNoMoreInteractions(list);
+
+		List list2 = mock(List.class);
+		list2.add(1);
+		list2.add(2);
+		verify(list2).add(1);
+		// æ£€æŸ¥æ˜¯å¦æœ‰æœªè¢«éªŒè¯çš„äº’åŠ¨è¡Œä¸ºï¼Œå› ä¸ºadd(2)æ²¡æœ‰è¢«éªŒè¯ï¼Œæ‰€ä»¥ä¸‹é¢çš„ä»£ç ä¼šå¤±è´¥æŠ›å‡ºå¼‚å¸¸
+		verifyNoMoreInteractions(list2);
+	}
+
+	// è¿ç»­è°ƒç”¨-----------------------------------------------------------------------------
+	@Test(expected = RuntimeException.class)
+	public void consecutive_calls() {
+		// æ¨¡æ‹Ÿè¿ç»­è°ƒç”¨è¿”å›æœŸæœ›å€¼ï¼Œå¦‚æœåˆ†å¼€ï¼Œåˆ™åªæœ‰æœ€åä¸€ä¸ªæœ‰æ•ˆ
+		List mockList = mock(List.class);
+		when(mockList.get(0)).thenReturn(0);
+		when(mockList.get(0)).thenReturn(1);
+		when(mockList.get(0)).thenReturn(2); // æœ€å¾Œä¸€å€‹æœ‰æ•ˆ
+		when(mockList.get(1)).thenReturn(0).thenReturn(1).thenThrow(new RuntimeException());
+		assertEquals(2, mockList.get(0));
+		assertEquals(2, mockList.get(0));
+		assertEquals(0, mockList.get(1));
+		assertEquals(1, mockList.get(1));
+		// ç¬¬ä¸‰æ¬¡æˆ–æ›´å¤šè°ƒç”¨éƒ½ä¼šæŠ›å‡ºå¼‚å¸¸
+		mockList.get(1);
+	}
+
+	// ä½¿ç”¨å›è°ƒç”ŸæˆæœŸæœ›å€¼------------------------------------------------------
+	@Test
+	public void answer_with_callback() {
+		// ä½¿ç”¨Answeræ¥ç”Ÿæˆæˆ‘ä»¬æˆ‘ä»¬æœŸæœ›çš„è¿”å›
+		List mockList = mock(List.class);
+		when(mockList.get(anyInt())).thenAnswer(new Answer<Object>() {
+			public Object answer(InvocationOnMock invocation) throws Throwable {
+				Object[] args = invocation.getArguments();
+				return "hello world:" + args[0];
+			}
+		});
+		assertEquals("hello world:0", mockList.get(0));
+		assertEquals("hello world:999", mockList.get(999));
+	}
+
+	// ç›‘æ§çœŸå®å¯¹è±¡ Spy ----------------------------------------------------------
+	@Test(expected = IndexOutOfBoundsException.class)
+	public void spy_on_real_objects() {
+		List list = new LinkedList();
+		List spy = spy(list);
+		// ä¸‹é¢é¢„è®¾çš„spy.get(0)ä¼šæŠ¥é”™ï¼Œå› ä¸ºä¼šè°ƒç”¨çœŸå®å¯¹è±¡çš„get(0)ï¼Œæ‰€ä»¥ä¼šæŠ›å‡ºè¶Šç•Œå¼‚å¸¸
+		// when(spy.get(0)).thenReturn(3);
+
+		// ä½¿ç”¨doReturn-whenå¯ä»¥é¿å…when-thenReturnè°ƒç”¨çœŸå®å¯¹è±¡api
+		doReturn(999).when(spy).get(999);
+		// é¢„è®¾size()æœŸæœ›å€¼
+		when(spy.size()).thenReturn(100);
+		// è°ƒç”¨çœŸå®å¯¹è±¡çš„api
+		spy.add(1);
+		spy.add(2);
+		assertEquals(100, spy.size());
+		assertEquals(1, spy.get(0));
+		assertEquals(2, spy.get(1));
+		verify(spy).add(1);
+		verify(spy).add(2);
+		assertEquals(999, spy.get(999));
+		spy.get(2);
+	}
 	
-	//Ä£ÄâÎÒÃÇËùÆÚÍûµÄ½á¹û-------------------------------------------------------
-    @Test    
-    public void when_thenReturn(){
-        //mockÒ»¸öIteratorÀà
-        Iterator iterator = mock(Iterator.class);
-        //Ô¤Éèµ±iteratorµ÷ÓÃnext()Ê±µÚÒ»´Î·µ»Øhello£¬µÚn´Î¶¼·µ»Øworld
-        when(iterator.next()).thenReturn("hello").thenReturn("world");
-        //Ê¹ÓÃmockµÄ¶ÔÏó
-        String result = iterator.next() + " " + iterator.next() + " " + iterator.next();
-        //ÑéÖ¤½á¹û
-        assertEquals("hello world world",result);
-    }
-    
-    @Test(expected = IOException.class)  
-    public void when_thenThrow() throws IOException {
-        OutputStream outputStream = mock(OutputStream.class);
-        OutputStreamWriter writer = new OutputStreamWriter(outputStream);
-        //Ô¤Éèµ±Á÷¹Ø±ÕÊ±Å×³öÒì³£
-        doThrow(new IOException()).when(outputStream).close();
-        outputStream.close();
-    }
-    
-    //²ÎÊıÆ¥Åä------------------------------------------------------------------
-    @Test
-    public void with_arguments(){
-        Comparable comparable = mock(Comparable.class);
-        //Ô¤Éè¸ù¾İ²»Í¬µÄ²ÎÊı·µ»Ø²»Í¬µÄ½á¹û
-        when(comparable.compareTo("Test")).thenReturn(1);
-        when(comparable.compareTo("Omg")).thenReturn(2);
-        assertEquals(1, comparable.compareTo("Test"));
-        assertEquals(2, comparable.compareTo("Omg"));
-        //¶ÔÓÚÃ»ÓĞÔ¤ÉèµÄÇé¿ö»á·µ»ØÄ¬ÈÏÖµ
-        assertEquals(0, comparable.compareTo("Not stub"));
-    }
-    
-    
-    
-    
-    @Test
-    /*
-     * RETURNS_SMART_NULLSÊµÏÖÁËAnswer½Ó¿ÚµÄ¶ÔÏó£¬ËüÊÇ´´½¨mock¶ÔÏóÊ±µÄÒ»¸ö¿ÉÑ¡²ÎÊı£¬     * mock(Class,Answer)¡£
-         *  ÔÚ´´½¨mock¶ÔÏóÊ±£¬ÓĞµÄ·½·¨ÎÒÃÇÃ»ÓĞ½øĞĞstubbing£¬ËùÒÔµ÷ÓÃÊ±»á·Å»ØNullÕâÑùÔÚ½øĞĞ²Ù×÷ÊÇºÜ¿ÉÄÜÅ×³öNullPointerException¡£
-         *  Èç¹ûÍ¨¹ıRETURNS_SMART_NULLS²ÎÊı´´½¨µÄmock¶ÔÏóÔÚÃ»ÓĞµ÷ÓÃstubbed·½·¨Ê±»á·µ»ØSmartNull¡£
-         *  ÀıÈç£º·µ»ØÀàĞÍÊÇString£¬»á·µ»Ø"";ÊÇint£¬»á·µ»Ø0£»ÊÇList£¬»á·µ»Ø¿ÕµÄList¡£ÁíÍâ£¬ÔÚ¿ØÖÆÌ¨´°¿ÚÖĞ¿ÉÒÔ¿´µ½SmartNullµÄÓÑºÃÌáÊ¾¡£
-     */
-    public void returnsSmartNullsTest() {
-        List mock = mock(List.class, RETURNS_SMART_NULLS);
-        System.out.println(mock.get(0));
-        
-        //Ê¹ÓÃRETURNS_SMART_NULLS²ÎÊı´´½¨µÄmock¶ÔÏó£¬²»»áÅ×³öNullPointerExceptionÒì³£¡£ÁíÍâ¿ØÖÆÌ¨´°¿Ú»áÌáÊ¾ĞÅÏ¢¡°SmartNull returned by unstubbed get() method on mock¡±
-        System.out.println(mock.toArray().length);
-    }
-    
-    //Ä£Äâ·½·¨ÌåÅ×³öÒì³£
-    @Test(expected = RuntimeException.class)
-    public void doThrow_when(){
-        List list = mock(List.class);
-        doThrow(new RuntimeException()).when(list).add(1);
-        list.add(1);
-    }
-    
-    
-    
-    //³ıÁËÆ¥ÅäÖÆ¶¨²ÎÊıÍâ£¬»¹¿ÉÒÔÆ¥Åä×Ô¼ºÏëÒªµÄÈÎÒâ²ÎÊı
-    @Test
-    public void with_unspecified_arguments(){
-        List list = mock(List.class);
-        //Æ¥ÅäÈÎÒâ²ÎÊı
-        when(list.get(anyInt())).thenReturn(1);
-        when(list.contains(argThat(new IsValid()))).thenReturn(true);
-        assertEquals(1, list.get(1));
-        assertEquals(1, list.get(999));
-        assertTrue(list.contains(1));
-        assertTrue(!list.contains(3));
-    }
+	//ä¿®æ”¹å¯¹æœªé¢„è®¾çš„è°ƒç”¨è¿”å›é»˜è®¤æœŸæœ›å€¼-------------------------------------------
+	@Test
+	public void unstubbed_invocations(){
+		//mockå¯¹è±¡ä½¿ç”¨Answeræ¥å¯¹æœªé¢„è®¾çš„è°ƒç”¨è¿”å›é»˜è®¤æœŸæœ›å€¼
+		List mock = mock(List.class,new Answer() {
+			public Object answer(InvocationOnMock invocation) throws Throwable {
+				return 999;
+			}
+		});
+		//ä¸‹é¢çš„get(1)æ²¡æœ‰é¢„è®¾ï¼Œé€šå¸¸æƒ…å†µä¸‹ä¼šè¿”å›NULLï¼Œä½†æ˜¯ä½¿ç”¨äº†Answeræ”¹å˜äº†é»˜è®¤æœŸæœ›å€¼
+		assertEquals(999, mock.get(1));
+		//ä¸‹é¢çš„size()æ²¡æœ‰é¢„è®¾ï¼Œé€šå¸¸æƒ…å†µä¸‹ä¼šè¿”å›0ï¼Œä½†æ˜¯ä½¿ç”¨äº†Answeræ”¹å˜äº†é»˜è®¤æœŸæœ›å€¼
+		assertEquals(999,mock.size());
+	}
+	
+	
+	/*
+	 * RETURNS_SMART_NULLSå®ç°äº†Answeræ¥å£çš„å¯¹è±¡ï¼Œå®ƒæ˜¯åˆ›å»ºmockå¯¹è±¡æ—¶çš„ä¸€ä¸ªå¯é€‰å‚æ•°ï¼Œ * mock(Class,Answer)ã€‚
+	 * åœ¨åˆ›å»ºmockå¯¹è±¡æ—¶ï¼Œæœ‰çš„æ–¹æ³•æˆ‘ä»¬æ²¡æœ‰è¿›è¡Œstubbingï¼Œæ‰€ä»¥è°ƒç”¨æ—¶ä¼šæ”¾å›Nullè¿™æ ·åœ¨è¿›è¡Œæ“ä½œæ˜¯å¾ˆå¯èƒ½æŠ›å‡ºNullPointerExceptionã€‚
+	 * å¦‚æœé€šè¿‡RETURNS_SMART_NULLSå‚æ•°åˆ›å»ºçš„mockå¯¹è±¡åœ¨æ²¡æœ‰è°ƒç”¨stubbedæ–¹æ³•æ—¶ä¼šè¿”å›SmartNullã€‚
+	 * ä¾‹å¦‚ï¼šè¿”å›ç±»å‹æ˜¯Stringï¼Œä¼šè¿”å›"";æ˜¯intï¼Œä¼šè¿”å›0ï¼›æ˜¯Listï¼Œä¼šè¿”å›ç©ºçš„Listã€‚å¦å¤–ï¼Œåœ¨æ§åˆ¶å°çª—å£ä¸­å¯ä»¥çœ‹åˆ°SmartNullçš„å‹å¥½æç¤ºã€‚
+	 */
+	@Test
+	public void returnsSmartNullsTest() {
+		List mock = mock(List.class, RETURNS_SMART_NULLS);
+		System.out.println(mock.get(0));
 
-    private class IsValid extends ArgumentMatcher<List>{
-        @Override
-        public boolean matches(Object o) {
-            return (Integer)o == 1 || (Integer)o == 2;
-        }
-    }
-    
-    //Èç¹ûÄãÊ¹ÓÃÁË²ÎÊıÆ¥Åä£¬ÄÇÃ´ËùÓĞµÄ²ÎÊı¶¼±ØĞëÍ¨¹ımatchersÀ´Æ¥Åä
-    @Test
-    public void all_arguments_provided_by_matchers(){
-        Comparator comparator = mock(Comparator.class);
-        comparator.compare("nihao","hello");
-        //Èç¹ûÄãÊ¹ÓÃÁË²ÎÊıÆ¥Åä£¬ÄÇÃ´ËùÓĞµÄ²ÎÊı¶¼±ØĞëÍ¨¹ımatchersÀ´Æ¥Åä
-        verify(comparator).compare(anyString(),eq("hello"));
-        //ÏÂÃæµÄÎªÎŞĞ§µÄ²ÎÊıÆ¥ÅäÊ¹ÓÃ
-        //verify(comparator).compare(anyString(),"hello");
-    }
-    
-    @Test
-    public void argumentMatchersTest(){
-        //´´½¨mock¶ÔÏó
-        List<String> mock = mock(List.class);
-
-        //argThat(Matches<T> matcher)·½·¨ÓÃÀ´Ó¦ÓÃ×Ô¶¨ÒåµÄ¹æÔò£¬¿ÉÒÔ´«ÈëÈÎºÎÊµÏÖMatcher½Ó¿ÚµÄÊµÏÖÀà¡£
-        when(mock.addAll(argThat(new IsListofTwoElements()))).thenReturn(true);
-
-        mock.addAll(Arrays.asList("one","two","three"));
-        //IsListofTwoElementsÓÃÀ´Æ¥ÅäsizeÎª2µÄList£¬ÒòÎªÀı×Ó´«ÈëListÎªÈı¸öÔªËØ£¬ËùÒÔ´ËÊ±½«Ê§°Ü¡£
-        verify(mock).addAll(argThat(new IsListofTwoElements()));
-    }
-    
-    class IsListofTwoElements extends ArgumentMatcher<List>
-    {
-        public boolean matches(Object list)
-        {
-            return((List)list).size()==3;
-        }
-    }
+		// ä½¿ç”¨RETURNS_SMART_NULLSå‚æ•°åˆ›å»ºçš„mockå¯¹è±¡ï¼Œä¸ä¼šæŠ›å‡ºNullPointerExceptionå¼‚å¸¸ã€‚å¦å¤–æ§åˆ¶å°çª—å£ä¼šæç¤ºä¿¡æ¯â€œSmartNull
+		// returned by unstubbed get() method on mockâ€
+		System.out.println(mock.toArray().length);
+	}	
+	
+	//çœŸå®çš„éƒ¨åˆ†mock-------------------------------------------------------------
+	@Test
+	public void real_partial_mock(){
+		//é€šè¿‡spyæ¥è°ƒç”¨çœŸå®çš„api
+		List list = spy(new ArrayList());
+		assertEquals(0,list.size());
+		A a = mock(A.class);
+		//é€šè¿‡thenCallRealMethodæ¥è°ƒç”¨çœŸå®çš„api
+		when(a.doSomething(anyInt())).thenCallRealMethod();
+		assertEquals(999,a.doSomething(999));
+	} 
+ 
+	class A{
+		public int doSomething(int i){
+			return i;
+		}
+	}
+	
+	//é‡ç½®Mock--------------------------------------------------------------------------
+	@Test
+	public void reset_mock(){
+		List list = mock(List.class);
+		when(list.size()).thenReturn(10);
+		list.add(1);
+		assertEquals(10,list.size());
+		//é‡ç½®mockï¼Œæ¸…é™¤æ‰€æœ‰çš„äº’åŠ¨å’Œé¢„è®¾
+		reset(list);
+		assertEquals(0,list.size());
+	}
 
 }
+
+
