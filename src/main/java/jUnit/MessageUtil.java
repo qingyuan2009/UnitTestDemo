@@ -16,4 +16,11 @@ public class MessageUtil {
 		return message;
 	}
 
+	// prints the message
+	public void printErrorMessage() {
+		System.out.println(message);
+		int a = 0;
+		int b = 1 / a;
+	}
+
 }
